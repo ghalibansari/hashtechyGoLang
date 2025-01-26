@@ -1,0 +1,70 @@
+definitions:
+  server.ErrorResponse:
+    properties:
+      code:
+        type: string
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+  server.UserResponse:
+    properties:
+      data: {}
+      message:
+        type: string
+      status:
+        type: string
+    type: object
+info:
+  contact: {}
+paths:
+  /users:
+    get:
+      consumes:
+      - application/json
+      description: Get users with optional filtering by name and age
+      parameters:
+      - description: Filter by name
+        in: query
+        name: name
+        type: string
+      - description: Minimum age
+        in: query
+        name: min_age
+        type: integer
+      - description: Maximum age
+        in: query
+        name: max_age
+        type: integer
+      - description: Number of records to return
+        in: query
+        name: limit
+        type: integer
+      - description: Number of records to skip
+        in: query
+        name: skip
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.UserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/server.ErrorResponse'
+      summary: Get users with filtering
+      tags:
+      - users
+swagger: "2.0"

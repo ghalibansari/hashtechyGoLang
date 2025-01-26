@@ -1,6 +1,7 @@
 package src
 
 import (
+	_ "hashtechy/docs" // Add this line to import Swagger docs
 	"hashtechy/src/logger"
 	"hashtechy/src/postgres"
 	"hashtechy/src/server"
@@ -21,6 +22,10 @@ func App() error {
 
 	postgres.DropUserTable()
 	postgres.CreateUserTable()
+	if err := postgres.CreateIndexes(); err != nil {
+		logger.Error("Failed to create indexes: %v", err)
+		return err
+	}
 	postgres.ShowDatabases()
 	postgres.ShowTables()
 
@@ -39,6 +44,8 @@ func App() error {
 	}
 
 	mux := server.Server()
+	server.AddSwaggerHandler(mux) // swagger
+
 	logger.Info("Server starting on port 3000...")
 	if err := http.ListenAndServe(":3000", mux); err != nil {
 		logger.Error("Server error: %v", err)

@@ -1,0 +1,43 @@
+# Version control
+.git
+.gitignore
+
+# IDE specific files
+.vscode
+.idea
+
+# Logs
+logs/
+*.log
+
+# Certificates (should be mounted at runtime)
+certs/
+*.crt
+*.key
+*.csr
+*.srl
+
+# Environment files
+.env
+*.env
+
+# Documentation
+# docs/
+*.md
+*.pdf
+
+# Test files
+*_test.go
+t.txt
+
+# Build artifacts
+bin/
+tmp/
+
+# Docker files (not needed inside container)
+Dockerfile
+docker-compose.yml
+# *.conf
+
+# Go specific
+vendor/
