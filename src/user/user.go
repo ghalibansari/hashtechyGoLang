@@ -2,6 +2,7 @@ package user
 
 import (
 	"fmt"
+	"hashtechy/src/encryption"
 	"regexp"
 )
 
@@ -26,5 +27,24 @@ func (u *User) Validate() error {
 		return fmt.Errorf("invalid email format")
 	}
 
+	return nil
+}
+
+// EncryptEmail encrypts the user's email using base64 encoding
+func (u *User) EncryptEmail() (string, error) {
+	encryptedEmail, err := encryption.Encrypt(u.Email)
+	if err != nil {
+		return "", fmt.Errorf("failed to encrypt email: %w", err)
+	}
+	// u.Email = encryptedEmail
+	return encryptedEmail, nil
+}
+
+func (u *User) DecryptEmail() error {
+	decryptedEmail, err := encryption.Decrypt(u.Email)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt email: %w", err)
+	}
+	u.Email = decryptedEmail
 	return nil
 }

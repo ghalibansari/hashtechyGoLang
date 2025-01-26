@@ -88,7 +88,7 @@ func ShowTables() {
 }
 
 func GetAllUsers() ([]user.User, error) {
-	rows, err := DB.Query("SELECT id, name, age FROM users")
+	rows, err := DB.Query("SELECT id, email, name, age FROM users")
 	if err != nil {
 		return nil, fmt.Errorf("failed to query users: %w", err)
 	}
@@ -97,8 +97,13 @@ func GetAllUsers() ([]user.User, error) {
 	var users []user.User
 	for rows.Next() {
 		var u user.User
-		if err := rows.Scan(&u.ID, &u.Name, &u.Age); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Age); err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		err := u.DecryptEmail()
+		if err != nil {
+			fmt.Printf("Error decrypting email for user %s: %v\n", u.ID, err)
+			continue
 		}
 		users = append(users, u)
 	}
@@ -112,7 +117,7 @@ func GetAllUsers() ([]user.User, error) {
 }
 
 func GetAllUsersByQuery(name string, minAge int, maxAge int, limitParam int, skipParam int) ([]user.User, error) {
-	sqlQuery := "SELECT id, name, age FROM users WHERE 1=1"
+	sqlQuery := "SELECT id, email, name, age FROM users WHERE 1=1"
 	var args []interface{}
 	argCount := 1
 
@@ -133,7 +138,6 @@ func GetAllUsersByQuery(name string, minAge int, maxAge int, limitParam int, ski
 
 	// Age filter (exact match or range)
 	if minAge != 0 {
-
 		sqlQuery += fmt.Sprintf(" AND age >= $%d", argCount)
 		args = append(args, minAge)
 		argCount++
@@ -173,8 +177,13 @@ func GetAllUsersByQuery(name string, minAge int, maxAge int, limitParam int, ski
 	var users []user.User
 	for rows.Next() {
 		var u user.User
-		if err := rows.Scan(&u.ID, &u.Name, &u.Age); err != nil {
+		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Age); err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		err := u.DecryptEmail()
+		if err != nil {
+			fmt.Printf("Error decrypting email for user %s: %v\n", u.ID, err)
+			continue
 		}
 		users = append(users, u)
 	}
@@ -188,9 +197,15 @@ func GetAllUsersByQuery(name string, minAge int, maxAge int, limitParam int, ski
 }
 
 func InsertUser(user user.User) (user.User, error) {
+	// Encrypt email before storing
+	encryptedEmail, err := user.EncryptEmail()
+	if err != nil {
+		return user, fmt.Errorf("failed to encrypt email: %w", err)
+	}
+
 	query := `INSERT INTO users (name, age, email) VALUES ($1, $2, $3) RETURNING id`
 	var id string
-	err := DB.QueryRow(query, user.Name, user.Age, user.Email).Scan(&id)
+	err = DB.QueryRow(query, user.Name, user.Age, encryptedEmail).Scan(&id)
 	if err != nil {
 		return user, fmt.Errorf("failed to insert user: %w", err)
 	}

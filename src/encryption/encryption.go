@@ -19,8 +19,18 @@ func init() {
 
 	key := os.Getenv("ENCRYPTION_KEY")
 	if key == "" {
-		key = "your-32-byte-secret-key-here!!!!!" // Default for development
+		key = "your-32-byte-secret-key-here!!" // Exactly 32 bytes
 	}
+
+	// Ensure key is exactly 32 bytes
+	if len(key) > 32 {
+		key = key[:32]
+	} else if len(key) < 32 {
+		// Pad with zeros if key is too short
+		padding := make([]byte, 32-len(key))
+		key = key + string(padding)
+	}
+
 	secretKey = []byte(key)
 }
 
