@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-func producer() error {
+func Producer() error {
 	err, header, csvChannel := readCsv("./user.csv")
 	if err != nil {
 		logger.Error("Failed to read CSV: %v", err)

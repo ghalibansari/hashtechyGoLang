@@ -58,6 +58,9 @@ func Server() *http.ServeMux {
 	mux.Handle("/users", limiter.RateLimit(handler))
 	mux.Handle("/all", getAllData())
 
+	// Add SSE endpoint
+	mux.HandleFunc("/events", handleSSE)
+
 	return mux
 }
 

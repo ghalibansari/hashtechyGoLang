@@ -38,7 +38,7 @@ func App() error {
 		defer wg.Done()
 	}()
 
-	if err := producer(); err != nil {
+	if err := Producer(); err != nil {
 		logger.Error("Producer error: %v", err)
 		return err
 	}
