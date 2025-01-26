@@ -27,7 +27,7 @@ import (
 // @Router /users [get]
 func Server() *http.ServeMux {
 	mux := http.NewServeMux()
-	limiter := NewRateLimiter(rate.Limit(2), 2)
+	limiter := NewRateLimiter(rate.Limit(200), 200)
 
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -58,9 +58,9 @@ func Server() *http.ServeMux {
 	mux.Handle("/users", limiter.RateLimit(handler))
 	mux.Handle("/all", getAllData())
 
-	// Serve static files
-	fs := http.FileServer(http.Dir("static"))
-	mux.Handle("/", fs)
+	// Serve static files and index.html
+	fs := http.FileServer(http.Dir("./static"))
+	mux.Handle("/", http.StripPrefix("/", fs)) // Serve static files at root
 
 	// Add SSE endpoint
 	mux.HandleFunc("/events", handleSSE)

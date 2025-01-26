@@ -11,6 +11,7 @@ FROM scratch
 
 WORKDIR /app
 COPY user.csv .
+COPY static/ static/
 COPY --from=builder /app/main .
 
 CMD ["./main"]

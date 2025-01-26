@@ -67,6 +67,7 @@ hashtechy/
 │   ├── redis.crt        # Redis certificate
 │   └── rabbitmq.crt     # RabbitMQ certificate
 ├── docs/                # Documentation
+├── static/              # Static files
 ├── docker compose.yml   # Service configuration
 └── main.go              # Application entry point
 ```

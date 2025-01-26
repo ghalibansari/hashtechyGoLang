@@ -7,6 +7,7 @@ import (
 	"hashtechy/src/server"
 	"net/http"
 	"sync"
+	"time"
 )
 
 func App() error {
@@ -38,10 +39,14 @@ func App() error {
 		defer wg.Done()
 	}()
 
-	if err := Producer(); err != nil {
-		logger.Error("Producer error: %v", err)
-		return err
-	}
+	wg.Add(1)
+	go func() {
+		time.Sleep(time.Second * 3)
+		if err := Producer(); err != nil {
+			logger.Error("Producer error: %v", err)
+		}
+		defer wg.Done()
+	}()
 
 	mux := server.Server()
 	server.AddSwaggerHandler(mux) // swagger

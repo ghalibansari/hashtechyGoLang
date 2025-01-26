@@ -6,6 +6,7 @@ import (
 	"hashtechy/src/rabbitmq"
 	"strings"
 	"sync"
+	"time"
 )
 
 func Producer() error {
@@ -28,6 +29,8 @@ func Producer() error {
 	var wg sync.WaitGroup
 
 	for msg := range csvChannel {
+		time.Sleep(time.Second * 2) // Simulate processing time
+
 		body, err := json.Marshal(msg)
 		if err != nil {
 			logger.Error("Failed to marshal message to JSON: %v", err)

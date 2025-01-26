@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"hashtechy/src/logger"
 	"hashtechy/src/postgres"
 	"net/http"
@@ -9,49 +10,58 @@ import (
 )
 
 func handleSSE(w http.ResponseWriter, r *http.Request) {
-	// Set headers for SSE
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 
-	// Create channel for client disconnect detection
-	notify := w.(http.CloseNotifier).CloseNotify()
+	done := r.Context().Done()
+	ticker := time.NewTicker(3 * time.Second) // update every 3 seconds
+	defer ticker.Stop()
+
+	// Send initial data immediately
+	sendUpdate(w)
 
 	for {
 		select {
-		case <-notify:
+		case <-done:
 			logger.Info("Client disconnected")
 			return
-		default:
-			// Get latest data
-			users, err := postgres.GetAllUsers()
-			if err != nil {
-				logger.Error("SSE: Failed to get users: %v", err)
-				continue
-			}
-
-			// Create event data
-			data := map[string]interface{}{
-				"timestamp": time.Now().Format(time.RFC3339),
-				"users":     users,
-			}
-
-			jsonData, err := json.Marshal(data)
-			if err != nil {
-				logger.Error("SSE: Failed to marshal data: %v", err)
-				continue
-			}
-
-			// Send event
-			_, err = w.Write([]byte("data: " + string(jsonData) + "\n\n"))
-			if err != nil {
-				logger.Error("SSE: Failed to write data: %v", err)
+		case <-ticker.C:
+			if err := sendUpdate(w); err != nil {
+				logger.Error("SSE: Failed to send update: %v", err)
 				return
 			}
-
-			w.(http.Flusher).Flush()
-			time.Sleep(5 * time.Second) // Update every 5 seconds
 		}
 	}
+}
+
+func sendUpdate(w http.ResponseWriter) error {
+	users, err := postgres.GetAllUsers()
+	if err != nil {
+		return err
+	}
+
+	data := map[string]interface{}{
+		"timestamp": time.Now().Format(time.RFC3339),
+		"users":     users,
+	}
+
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	// Write event, data, and newlines in ONE operation
+	_, err = fmt.Fprintf(w, "event: userUpdate\ndata: %s\n\n", string(jsonData))
+	if err != nil {
+		return err
+	}
+
+	// Flush immediately
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+
+	return nil
 }
