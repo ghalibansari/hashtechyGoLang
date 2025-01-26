@@ -1,0 +1,105 @@
+services:
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    networks:
+      - app-network
+    ports:
+      - "3000:3000"
+    environment:
+      - DB_HOST=postgres
+      - REDIS_HOST=redis
+      - RABBITMQ_HOST=rabbitmq
+    volumes:
+      - ./certs:/app/certs:ro
+      # - .:/app # Temp for development only.
+
+  rabbitmq:
+    image: rabbitmq:4.0-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    networks:
+      - app-network
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: "-proto_dist inet_tls -ssl_dist_optfile /etc/rabbitmq/rabbitmq_ssl.config"
+    volumes:
+      - common-storage:/data
+      - ./certs:/certs:ro
+      - ./rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./rabbitmq_ssl.config:/etc/rabbitmq/rabbitmq_ssl.config:ro
+
+  redis:
+    image: redis:latest
+    command: redis-server --tls-port 6379 --port 0 --tls-cert-file /certs/redis.crt --tls-key-file /certs/redis.key --tls-ca-cert-file /certs/ca.crt --tls-auth-clients no
+    networks:
+      - app-network
+    ports:
+      - "6379:6379"
+    volumes:
+      - common-storage:/data
+      - ./certs:/certs:ro
+
+  redisinsight:
+    image: redislabs/redisinsight:latest
+    networks:
+      - app-network
+    ports:
+      - "5540:5540"
+    environment:
+      - REDISINSIGHT_HOST=0.0.0.0
+      - REDISINSIGHT_PORT=5540
+    depends_on:
+      - redis
+    volumes:
+      - ./certs:/certs:ro
+      - redisinsight_data:/db
+
+  postgres:
+    image: postgres:latest
+    networks:
+      - app-network
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: crypto_db
+      POSTGRES_SSL: "on"
+      POSTGRES_SSL_CERT_FILE: /certs/postgres.crt
+      POSTGRES_SSL_KEY_FILE: /certs/postgres.key
+      POSTGRES_SSL_CA_FILE: /certs/ca.crt
+      PGSSLMODE: "verify-full"
+    command: >
+      -c ssl=on
+      -c ssl_cert_file=/certs/postgres.crt
+      -c ssl_key_file=/certs/postgres.key
+      -c ssl_ca_file=/certs/ca.crt
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./certs:/certs:ro
+
+volumes:
+  common-storage:
+    driver: local
+  postgres_data:
+    driver: local
+  redisinsight_data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
