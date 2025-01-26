@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+// handleSSE manages a Server-Sent Events connection, periodically sending user updates
 func handleSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -36,6 +37,7 @@ func handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// sendUpdate generates and sends a JSON-encoded update with current user data and timestamp
 func sendUpdate(w http.ResponseWriter) error {
 	users, err := postgres.GetAllUsers()
 	if err != nil {

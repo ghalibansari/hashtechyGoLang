@@ -25,6 +25,7 @@ import (
 // @Failure 429 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /users [get]
+// Server sets up and configures the HTTP multiplexer with various routes and middleware
 func Server() *http.ServeMux {
 	mux := http.NewServeMux()
 	limiter := NewRateLimiter(rate.Limit(200), 200)
@@ -68,6 +69,7 @@ func Server() *http.ServeMux {
 	return mux
 }
 
+// sendResponse writes a JSON response with the provided data and sets appropriate headers
 func sendResponse(w http.ResponseWriter, response interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	jsonData, err := json.Marshal(response)
@@ -79,6 +81,7 @@ func sendResponse(w http.ResponseWriter, response interface{}) {
 	w.Write(jsonData)
 }
 
+// sendError writes a standardized JSON error response with the specified status code
 func sendError(w http.ResponseWriter, message string, status int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
