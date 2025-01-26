@@ -2,7 +2,8 @@ package src
 
 import (
 	"encoding/csv"
-	"fmt"
+	"hashtechy/src/errors"
+	"hashtechy/src/logger"
 	"hashtechy/src/user"
 	"os"
 	"strconv"
@@ -24,13 +25,13 @@ func validateCSVInput(records [][]string) error {
 				strings.Contains(strings.ToLower(field), "delete") ||
 				strings.Contains(strings.ToLower(field), "update") ||
 				strings.Contains(strings.ToLower(field), ";") {
-				return fmt.Errorf("potential SQL injection detected in record %d", i)
+				return errors.New(errors.ErrValidation, "potential SQL injection detected", nil)
 			}
 
 			// Check for XSS patterns
 			if strings.Contains(field, "<script>") ||
 				strings.Contains(field, "</script>") {
-				return fmt.Errorf("potential XSS attack detected in record %d", i)
+				return errors.New(errors.ErrValidation, "potential XSS attack detected", nil)
 			}
 		}
 	}
@@ -38,9 +39,10 @@ func validateCSVInput(records [][]string) error {
 }
 
 func parseAge(ageStr string) int {
-	age, err := strconv.Atoi(ageStr) // Convert string to int
+	age, err := strconv.Atoi(ageStr)
 	if err != nil {
-		return 0 // Return 0 or handle the error as needed
+		logger.Error("Failed to parse age: %v", err)
+		return 0
 	}
 	return age
 }
@@ -48,6 +50,7 @@ func parseAge(ageStr string) int {
 func readCsv(name string) (err error, header []string, c chan user.User) {
 	file, err := os.Open(name)
 	if err != nil {
+		logger.Error("Failed to open CSV file: %v", err)
 		return err, nil, nil
 	}
 	defer file.Close()
@@ -55,21 +58,26 @@ func readCsv(name string) (err error, header []string, c chan user.User) {
 	reader := csv.NewReader(file)
 	records, err := reader.ReadAll()
 	if err != nil {
+		logger.Error("Failed to read CSV file: %v", err)
 		return err, nil, nil
 	}
 
 	// Validate CSV input before processing
 	if err := validateCSVInput(records); err != nil {
+		logger.Error("CSV validation failed: %v", err)
 		return err, nil, nil
 	}
 
 	recordLength := len(records)
 	if recordLength == 1 {
-		return fmt.Errorf("CSV file contains only a header with no data"), nil, nil
+		err := errors.New(errors.ErrValidation, "CSV file contains only a header with no data", nil)
+		logger.Error(err.Error())
+		return err, nil, nil
 	}
 
 	header = records[0]
 	dataRecords := records[1:]
+	logger.Info("Processing CSV with %d records", len(dataRecords))
 
 	c = make(chan user.User, len(dataRecords))
 	go func() {
@@ -82,7 +90,7 @@ func readCsv(name string) (err error, header []string, c chan user.User) {
 				defer wg.Done()
 
 				if len(record) < 3 {
-					fmt.Printf("Skipping record due to insufficient columns: %v\n", record)
+					logger.Error("Skipping record due to insufficient columns: %v", record)
 					return
 				}
 
@@ -95,16 +103,18 @@ func readCsv(name string) (err error, header []string, c chan user.User) {
 
 				err = user.Validate()
 				if err != nil {
-					fmt.Printf("Skipping record due to validation error: %v\n", err)
+					logger.Error("Skipping record due to validation error: %v", err)
 					return
 				}
 				c <- user
+				logger.Debug("Successfully processed user record: %s", user.Email)
 			}(record)
 		}
 
 		wg.Wait()
 	}()
 
+	logger.Info("CSV processing started")
 	return nil, header, c
 }
 

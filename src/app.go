@@ -1,17 +1,20 @@
 package src
 
 import (
+	"hashtechy/src/logger"
 	"hashtechy/src/postgres"
 	"hashtechy/src/server"
-	"log"
 	"net/http"
 	"sync"
 )
 
 func App() error {
+	defer logger.Close()
+	logger.Info("Starting application...")
 
 	err := postgres.Connect()
 	if err != nil {
+		logger.Error("Failed to connect to database: %v", err)
 		return err
 	}
 	defer postgres.DB.Close()
@@ -24,18 +27,23 @@ func App() error {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		consumer()
+		if err := consumer(); err != nil {
+			logger.Error("Consumer error: %v", err)
+		}
 		defer wg.Done()
 	}()
 
-	err = producer()
-	if err != nil {
+	if err := producer(); err != nil {
+		logger.Error("Producer error: %v", err)
 		return err
 	}
 
 	mux := server.Server()
-	log.Println("Server starting on port 3000...")
-	http.ListenAndServe(":3000", mux)
+	logger.Info("Server starting on port 3000...")
+	if err := http.ListenAndServe(":3000", mux); err != nil {
+		logger.Error("Server error: %v", err)
+		return err
+	}
 
 	wg.Wait()
 	return nil

@@ -3,8 +3,9 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
+	"hashtechy/src/errors"
+	"hashtechy/src/logger"
 	"hashtechy/src/user"
-	"log"
 	"strings"
 	"time"
 
@@ -24,7 +25,7 @@ func Connect() error {
 	for i := 0; i < 10; i++ {
 		db, err = sql.Open("postgres", connStr)
 		if err != nil {
-			log.Printf("Attempt %d: Failed to open database: %v", i+1, err)
+			logger.Error("Attempt %d: Failed to open database: %v", i+1, err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
@@ -32,65 +33,74 @@ func Connect() error {
 		if err = db.Ping(); err == nil {
 			break
 		}
-		log.Printf("Attempt %d: Failed to connect to database: %v", i+1, err)
+		logger.Error("Attempt %d: Failed to connect to database: %v", i+1, err)
 		time.Sleep(2 * time.Second)
 	}
 
 	if err != nil {
-		return fmt.Errorf("failed to connect to database after retries: %w", err)
+		return errors.New(errors.ErrDatabase, "failed to connect to database after retries", err)
 	}
 
 	DB = db
 	DB.SetMaxOpenConns(100)
+	logger.Info("Successfully connected to database")
 	return nil
 }
 
 func ShowDatabases() {
 	rows, err := DB.Query("SELECT datname FROM pg_database")
 	if err != nil {
-		panic(err)
+		logger.Error("Failed to query databases: %v", err)
+		return
 	}
 	defer rows.Close()
+
 	var databases []string
 	for rows.Next() {
 		var dbName string
 		if err := rows.Scan(&dbName); err != nil {
-			panic(err)
+			logger.Error("Failed to scan database name: %v", err)
+			return
 		}
 		databases = append(databases, dbName)
 	}
-	// Check for errors after iterating
+
 	if err = rows.Err(); err != nil {
-		panic(err)
+		logger.Error("Error during database iteration: %v", err)
+		return
 	}
-	fmt.Println("Databases:", databases)
+	logger.Info("Available databases: %v", databases)
 }
 
 func ShowTables() {
 	rows, err := DB.Query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'")
 	if err != nil {
-		panic(err)
+		logger.Error("Failed to query tables: %v", err)
+		return
 	}
 	defer rows.Close()
+
 	var tables []string
 	for rows.Next() {
 		var tableName string
 		if err := rows.Scan(&tableName); err != nil {
-			panic(err)
+			logger.Error("Failed to scan table name: %v", err)
+			return
 		}
 		tables = append(tables, tableName)
 	}
-	// Check for errors after iterating
+
 	if err = rows.Err(); err != nil {
-		panic(err)
+		logger.Error("Error during table iteration: %v", err)
+		return
 	}
-	fmt.Println("Tables:", tables)
+	logger.Info("Available tables: %v", tables)
 }
 
 func GetAllUsers() ([]user.User, error) {
 	rows, err := DB.Query("SELECT id, email, name, age FROM users")
 	if err != nil {
-		return nil, fmt.Errorf("failed to query users: %w", err)
+		return nil, errors.New(errors.ErrDatabase, "failed to query users", err)
 	}
 	defer rows.Close()
 
@@ -98,21 +108,21 @@ func GetAllUsers() ([]user.User, error) {
 	for rows.Next() {
 		var u user.User
 		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Age); err != nil {
-			return nil, fmt.Errorf("failed to scan user: %w", err)
+			return nil, errors.New(errors.ErrDatabase, "failed to scan user", err)
 		}
 		err := u.DecryptEmail()
 		if err != nil {
-			fmt.Printf("Error decrypting email for user %s: %v\n", u.ID, err)
+			logger.Error("Error decrypting email for user %s: %v", u.ID, err)
 			continue
 		}
 		users = append(users, u)
 	}
 
-	// Check for errors after iterating
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error during rows iteration: %w", err)
+		return nil, errors.New(errors.ErrDatabase, "error during rows iteration", err)
 	}
 
+	logger.Debug("Retrieved %d users from database", len(users))
 	return users, nil
 }
 
@@ -121,11 +131,10 @@ func GetAllUsersByQuery(name string, minAge int, maxAge int, limitParam int, ski
 	var args []interface{}
 	argCount := 1
 
-	// Name filter
 	if name != "" {
 		name = strings.TrimSpace(name)
 		if strings.ContainsAny(name, "%;'\"") {
-			return nil, fmt.Errorf("invalid characters in name parameter")
+			return nil, errors.New(errors.ErrValidation, "invalid characters in name parameter", nil)
 		}
 		sqlQuery += fmt.Sprintf(" AND name LIKE $%d", argCount)
 		args = append(args, "%"+name+"%")
@@ -133,19 +142,17 @@ func GetAllUsersByQuery(name string, minAge int, maxAge int, limitParam int, ski
 	}
 
 	if minAge < 0 || maxAge < 0 {
-		return nil, fmt.Errorf("age cannot be negative")
+		return nil, errors.New(errors.ErrValidation, "age cannot be negative", nil)
 	}
 
-	// Age filter (exact match or range)
 	if minAge != 0 {
 		sqlQuery += fmt.Sprintf(" AND age >= $%d", argCount)
 		args = append(args, minAge)
 		argCount++
 	}
 
-	// TODO: later move this to validate.go and use validator package
 	if minAge > 120 || maxAge > 120 {
-		return nil, fmt.Errorf("age exceeds maximum allowed value")
+		return nil, errors.New(errors.ErrValidation, "age exceeds maximum allowed value", nil)
 	}
 
 	if maxAge != 0 {
@@ -154,8 +161,7 @@ func GetAllUsersByQuery(name string, minAge int, maxAge int, limitParam int, ski
 		argCount++
 	}
 
-	// Pagination
-	limit := 10 // Default limit
+	limit := 10
 	if limitParam != 0 {
 		limit = limitParam
 	}
@@ -167,10 +173,10 @@ func GetAllUsersByQuery(name string, minAge int, maxAge int, limitParam int, ski
 	}
 	sqlQuery += fmt.Sprintf(" OFFSET %d", skip)
 
-	// Execute query
+	logger.Debug("Executing query: %s with args: %v", sqlQuery, args)
 	rows, err := DB.Query(sqlQuery, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query users: %w", err)
+		return nil, errors.New(errors.ErrDatabase, "failed to query users", err)
 	}
 	defer rows.Close()
 
@@ -178,58 +184,37 @@ func GetAllUsersByQuery(name string, minAge int, maxAge int, limitParam int, ski
 	for rows.Next() {
 		var u user.User
 		if err := rows.Scan(&u.ID, &u.Email, &u.Name, &u.Age); err != nil {
-			return nil, fmt.Errorf("failed to scan user: %w", err)
+			return nil, errors.New(errors.ErrDatabase, "failed to scan user", err)
 		}
 		err := u.DecryptEmail()
 		if err != nil {
-			fmt.Printf("Error decrypting email for user %s: %v\n", u.ID, err)
+			logger.Error("Error decrypting email for user %s: %v", u.ID, err)
 			continue
 		}
 		users = append(users, u)
 	}
 
-	// Check for errors after iterating
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error during rows iteration: %w", err)
+		return nil, errors.New(errors.ErrDatabase, "error during rows iteration", err)
 	}
 
+	logger.Debug("Retrieved %d users from query", len(users))
 	return users, nil
 }
 
 func InsertUser(user user.User) (user.User, error) {
-	// Encrypt email before storing
 	encryptedEmail, err := user.EncryptEmail()
 	if err != nil {
-		return user, fmt.Errorf("failed to encrypt email: %w", err)
+		return user, errors.New(errors.ErrEncryption, "failed to encrypt email", err)
 	}
 
 	query := `INSERT INTO users (name, age, email) VALUES ($1, $2, $3) RETURNING id`
 	var id string
 	err = DB.QueryRow(query, user.Name, user.Age, encryptedEmail).Scan(&id)
 	if err != nil {
-		return user, fmt.Errorf("failed to insert user: %w", err)
+		return user, errors.New(errors.ErrDatabase, "failed to insert user", err)
 	}
 	user.ID = id
+	logger.Info("Successfully inserted user with ID: %s", id)
 	return user, nil
 }
-
-// clean-up unnecessary
-// func CheckUUIDUsed(id uuid.UUID) (bool, error) {
-// 	var exists bool
-// 	query := `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`
-// 	err := DB.QueryRow(query, id.String()).Scan(&exists)
-// 	if err != nil {
-// 		return false, fmt.Errorf("failed to check if UUID is used: %w", err)
-// 	}
-// 	return exists, nil
-// }
-
-// GenerateUUID retrieves a new UUID from the database // clean-up unnecessary
-// func GenerateUUID() (string, error) {
-// 	var newID string
-// 	err := DB.QueryRow("SELECT uuid_generate_v4()").Scan(&newID)
-// 	if err != nil || newID == "" {
-// 		return "", fmt.Errorf("failed to generate a valid UUID: %w", err)
-// 	}
-// 	return newID, nil
-// }
